@@ -1,0 +1,12 @@
+services:
+  db:
+    container_name: RMS
+    image: "postgres"
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=Hemant
+      - POSTGRES_PASSWORD=Hemant
+      - POSTGRES_DB=RMS
