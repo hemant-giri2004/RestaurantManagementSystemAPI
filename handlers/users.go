@@ -98,7 +98,7 @@ import (
 //
 //}
 
-func CreateSubadmin(w http.ResponseWriter, r *http.Request) {
+func CreateSubAdmin(w http.ResponseWriter, r *http.Request) {
 	// Parse body
 	var req models.CreateSubadminRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -327,7 +327,7 @@ func AddUserAddress(w http.ResponseWriter, r *http.Request) {
 
 // handlers/users.go
 
-func ListSubadmins(w http.ResponseWriter, r *http.Request) {
+func ListOfSubAdmins(w http.ResponseWriter, r *http.Request) {
 	subadmins, err := dbHelper.GetUsersByRole("subadmin")
 	if err != nil {
 		logrus.Errorf("Error fetching subadmins: %v", err)
