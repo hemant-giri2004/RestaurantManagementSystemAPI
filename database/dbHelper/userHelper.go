@@ -19,11 +19,19 @@ func CreateUserWithRole(username, email, hashedPassword, roleName string, create
 	defer tx.Rollback()
 
 	// Insert user
-	_, err = tx.Exec(`
+	if createdBy != uuid.Nil {
+		_, err = tx.Exec(`
 		INSERT INTO users (id, username, email, password, created_by)
 		VALUES ($1, $2, $3, $4, $5)
 	`, userID, username, email, hashedPassword, createdBy)
+	} else {
+		_, err = tx.Exec(`
+		INSERT INTO users (id, username, email, password)
+		VALUES ($1, $2, $3, $4)
+		`, userID, username, email, hashedPassword)
+	}
 	if err != nil {
+		fmt.Println("error in creating user", err.Error())
 		return "", err
 	}
 
@@ -95,6 +103,21 @@ func GetUserRoles(userID uuid.UUID) ([]string, error) {
 	return roles, err
 }
 
+func CheckUserRoles(userID uuid.UUID, role string) (bool, error) {
+	//fmt.Println(userID, role)
+	exists := false
+	query := `
+        SELECT true
+        FROM user_roles ur
+        JOIN roles r ON ur.role_id = r.id
+        WHERE ur.user_id = $1 AND r.role_name = $2
+        LIMIT 1;
+	`
+	err := database.RMS.Get(&exists, query, userID, role)
+	//fmt.Println(exists)
+	return exists, err
+}
+
 func GetUserByEmail(email string) (*models.User, error) {
 	var user models.User
 	query := `
@@ -120,16 +143,20 @@ func InsertUserAddress(userID uuid.UUID, label string, lat, lng float64) (uuid.U
 	return id, err
 }
 
-func GetUsersByRole(roleName string) ([]models.User, error) {
+func GetUsersByRole(roleName string, page, limit int) ([]models.User, error) {
+	offset := (page - 1) * limit
+	//fmt.Println("GetUsersByRole", page, limit, offset)
 	query := `
 		SELECT u.id, u.username, u.email, u.created_at
 		FROM users u
 		JOIN user_roles ur ON u.id = ur.user_id
 		JOIN roles r ON ur.role_id = r.id
 		WHERE LOWER(r.role_name) = LOWER($1)
+		ORDER BY created_at
+		LIMIT $2 OFFSET $3
 	`
 
-	rows, err := database.RMS.Query(query, roleName)
+	rows, err := database.RMS.Query(query, roleName, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -148,14 +175,15 @@ func GetUsersByRole(roleName string) ([]models.User, error) {
 
 // dbHelper/user.go
 
-func GetUsersVisibleTo(requesterID uuid.UUID, isAdmin bool) ([]models.User, error) {
+func GetUsersVisibleTo(requesterID uuid.UUID, isAdmin bool, page, limit int) ([]models.User, error) {
+	offset := (page - 1) * limit
 	var rows *sql.Rows
 	var err error
 
 	if isAdmin {
-		rows, err = database.RMS.Query(`SELECT id, username, email, created_at FROM users`)
+		rows, err = database.RMS.Query(`SELECT id, username, email, created_at FROM users ORDER BY  created_at  LIMIT $1 OFFSET $2`, limit, offset)
 	} else {
-		rows, err = database.RMS.Query(`SELECT id, username, email, created_at FROM users WHERE created_by = $1`, requesterID)
+		rows, err = database.RMS.Query(`SELECT id, username, email, created_at FROM users WHERE created_by = $1 ORDER BY  created_at LIMIT $2 OFFSET $3`, requesterID, limit, offset)
 	}
 
 	if err != nil {
