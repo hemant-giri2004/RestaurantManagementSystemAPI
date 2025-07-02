@@ -23,8 +23,11 @@ func SetupRoutes() http.Handler {
 	}).Methods("GET")
 
 	// Public Routes
-	//r.HandleFunc("/signup", handlers.RegisterHandler).Methods("POST")
-	r.HandleFunc("/sign-in", handlers.LoginHandler).Methods("POST")
+	r.HandleFunc("/sign-up", handlers.RegisterUser).Methods("POST")
+	r.HandleFunc("/sign-in", handlers.Login).Methods("POST")
+	r.HandleFunc("/user/sign-in", handlers.LoginUser).Methods("POST")
+	r.HandleFunc("/sub-admin/sign-in", handlers.LoginSubAdmin).Methods("POST")
+	r.HandleFunc("/admin/sign-in", handlers.LoginAdmin).Methods("POST")
 
 	// Session protected routes
 	session := r.PathPrefix("/session").Subrouter()

@@ -15,89 +15,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-//func RegisterHandler(w http.ResponseWriter, r *http.Request) {
-//	var req models.RegisterRequest
-//	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-//		http.Error(w, "invalid request body", http.StatusBadRequest)
-//		return
-//	}
-//
-//	// Check if user already exists
-//	exists, err := dbHelper.IsEmailAlreadyRegistered(req.Email)
-//	if err != nil {
-//		http.Error(w, "internal server error", http.StatusInternalServerError)
-//		return
-//	}
-//	if exists {
-//		http.Error(w, "email already in use", http.StatusConflict)
-//		return
-//	}
-//
-//	// Hash password
-//	hashedPassword, err := utils.HashPassword(req.Password)
-//	if err != nil {
-//		http.Error(w, "failed to hash password", http.StatusInternalServerError)
-//		return
-//	}
-//
-//	// Create user
-//	userID := uuid.New()
-//	err = dbHelper.CreateUser(userID, req.Username, req.Email, hashedPassword)
-//	if err != nil {
-//		http.Error(w, "failed to create user", http.StatusInternalServerError)
-//		return
-//	}
-//
-//	// Assign roles
-//	if len(req.Roles) == 0 {
-//		req.Roles = []string{"user"}
-//	}
-//	for _, roleName := range req.Roles {
-//		err := dbHelper.AssignRoleToUser(userID, roleName)
-//		if err != nil {
-//			logrus.Warnf("role assignment failed: %s", err.Error())
-//		}
-//	}
-//
-//	// Add addresses
-//	if len(req.Addresses) > 0 {
-//		for _, addr := range req.Addresses {
-//			err := dbHelper.InsertAddress(userID, addr)
-//			if err != nil {
-//				logrus.Warnf("Failed to insert address for user %s: %v", userID, err)
-//			}
-//		}
-//	} else {
-//		logrus.Infof("No address provided for user %s", userID)
-//	}
-//
-//	//create access token
-//	accessToken, err := utils.GenerateJWT(userID.String(), req.Roles)
-//	if err != nil {
-//		http.Error(w, "failed to generate access token", http.StatusInternalServerError)
-//		return
-//	}
-//
-//	// Create refresh token
-//	refreshToken, err := utils.CreateRefreshToken(userID)
-//	if err != nil {
-//		http.Error(w, "failed to create session", http.StatusInternalServerError)
-//		return
-//	}
-//
-//	//create response
-//	resp := models.Response{
-//		Message:      "User registered successfully",
-//		AccessToken:  accessToken,
-//		RefreshToken: refreshToken,
-//	}
-//	//send response
-//	w.WriteHeader(http.StatusCreated)
-//	w.Header().Set("Content-Type", "application/json")
-//	json.NewEncoder(w).Encode(resp)
-//
-//}
-
 func CreateSubAdmin(w http.ResponseWriter, r *http.Request) {
 	// Parse body
 	var req models.CreateSubadminRequest
@@ -116,7 +33,6 @@ func CreateSubAdmin(w http.ResponseWriter, r *http.Request) {
 	creatorIDRaw := r.Context().Value(middleware.UserIDKey)
 	creatorID, ok := creatorIDRaw.(uuid.UUID)
 	if !ok {
-		//fmt.Println("CreateSubadminHandler")
 		http.Error(w, "Unauthorized: userID missing in context", http.StatusUnauthorized)
 		return
 	}
@@ -197,7 +113,47 @@ func CreateUserByAdminOrSubadmin(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func LoginHandler(w http.ResponseWriter, r *http.Request) {
+func RegisterUser(w http.ResponseWriter, r *http.Request) {
+	var req models.CreateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	if req.Username == "" || req.Email == "" || req.Password == "" {
+		http.Error(w, "username, email and password are required", http.StatusBadRequest)
+		return
+	}
+
+	// Hash password
+	hashedPassword, err := utils.HashPassword(req.Password)
+	if err != nil {
+		http.Error(w, "Error hashing password", http.StatusInternalServerError)
+		return
+	}
+
+	// Create user with role "user"
+	userID, err := dbHelper.CreateUserWithRole(req.Username, req.Email, hashedPassword, "user", uuid.Nil)
+	if err != nil {
+		if strings.Contains(err.Error(), "duplicate key") {
+			http.Error(w, "Email already exists", http.StatusConflict)
+			return
+		}
+		logrus.Errorf("Error creating user: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	resp := map[string]interface{}{
+		"message": "User created successfully",
+		"user_id": userID,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func Login(w http.ResponseWriter, r *http.Request) {
 	var req models.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -242,6 +198,178 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	//  Respond
 	res := models.Response{
 		Message:      "User logged in Successfully",
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
+}
+
+func LoginUser(w http.ResponseWriter, r *http.Request) {
+	var req models.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Get user
+	user, err := dbHelper.GetUserByEmail(req.Email)
+	if err != nil {
+		http.Error(w, "invalid email or password", http.StatusUnauthorized)
+		return
+	}
+
+	// Check password
+	if err := utils.CheckPassword(req.Password, user.Password); err != nil {
+		//fmt.Println("LoginHandler :%w", err)
+		http.Error(w, "invalid email or password", http.StatusUnauthorized)
+		return
+	}
+
+	// check roles
+	exists, err := dbHelper.CheckUserRoles(user.ID, "user")
+	if err != nil {
+		http.Error(w, "failed to fetch roles", http.StatusInternalServerError)
+		return
+	}
+	if !exists {
+		http.Error(w, "invalid user", http.StatusUnauthorized)
+		return
+	}
+	// Generate JWT
+	temp := []string{"user"}
+	accessToken, err := utils.GenerateJWT(user.ID.String(), temp)
+	if err != nil {
+		http.Error(w, "failed to generate access token", http.StatusInternalServerError)
+		return
+	}
+
+	// Refresh token
+	refreshToken, err := utils.CreateRefreshToken(user.ID)
+	if err != nil {
+		http.Error(w, "failed to create refresh token", http.StatusInternalServerError)
+		return
+	}
+
+	//  Respond
+	res := models.Response{
+		Message:      "User logged in Successfully",
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
+}
+
+func LoginSubAdmin(w http.ResponseWriter, r *http.Request) {
+	var req models.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Get user
+	user, err := dbHelper.GetUserByEmail(req.Email)
+	if err != nil {
+		http.Error(w, "invalid email or password", http.StatusUnauthorized)
+		return
+	}
+
+	// Check password
+	if err := utils.CheckPassword(req.Password, user.Password); err != nil {
+		//fmt.Println("LoginHandler :%w", err)
+		http.Error(w, "invalid email or password", http.StatusUnauthorized)
+		return
+	}
+
+	// check roles
+	exists, err := dbHelper.CheckUserRoles(user.ID, "subadmin")
+	if err != nil {
+		http.Error(w, "failed to fetch roles", http.StatusInternalServerError)
+		return
+	}
+	if !exists {
+		http.Error(w, "invalid user", http.StatusUnauthorized)
+		return
+	}
+	// Generate JWT
+	temp := []string{"subadmin"}
+	accessToken, err := utils.GenerateJWT(user.ID.String(), temp)
+	if err != nil {
+		http.Error(w, "failed to generate access token", http.StatusInternalServerError)
+		return
+	}
+
+	// Refresh token
+	refreshToken, err := utils.CreateRefreshToken(user.ID)
+	if err != nil {
+		http.Error(w, "failed to create refresh token", http.StatusInternalServerError)
+		return
+	}
+
+	//  Respond
+	res := models.Response{
+		Message:      "SubAdmin logged in Successfully",
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(res)
+}
+
+func LoginAdmin(w http.ResponseWriter, r *http.Request) {
+	var req models.LoginRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	//fmt.Println(req)
+	// Get user
+	user, err := dbHelper.GetUserByEmail(req.Email)
+	if err != nil {
+		http.Error(w, "invalid email or password", http.StatusUnauthorized)
+		return
+	}
+
+	// Check password
+	if err := utils.CheckPassword(req.Password, user.Password); err != nil {
+		//fmt.Println("LoginHandler :%w", err)
+		http.Error(w, "invalid email or password", http.StatusUnauthorized)
+		return
+	}
+
+	// check roles
+	exists, err := dbHelper.CheckUserRoles(user.ID, "admin")
+	if err != nil {
+		http.Error(w, "failed to fetch roles", http.StatusInternalServerError)
+		return
+	}
+	if !exists {
+		http.Error(w, "invalid user", http.StatusUnauthorized)
+		return
+	}
+	// Generate JWT
+	temp := []string{"admin"}
+	accessToken, err := utils.GenerateJWT(user.ID.String(), temp)
+	if err != nil {
+		http.Error(w, "failed to generate access token", http.StatusInternalServerError)
+		return
+	}
+
+	// Refresh token
+	refreshToken, err := utils.CreateRefreshToken(user.ID)
+	if err != nil {
+		http.Error(w, "failed to create refresh token", http.StatusInternalServerError)
+		return
+	}
+
+	//  Respond
+	res := models.Response{
+		Message:      "Admin logged in Successfully",
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}
@@ -328,20 +456,23 @@ func AddUserAddress(w http.ResponseWriter, r *http.Request) {
 // handlers/users.go
 
 func ListOfSubAdmins(w http.ResponseWriter, r *http.Request) {
-	subadmins, err := dbHelper.GetUsersByRole("subadmin")
+	page, limit := utils.ParsePageAndLimit(r)
+	//fmt.Println(page, limit)
+	subAdmins, err := dbHelper.GetUsersByRole("subadmin", page, limit)
 	if err != nil {
-		logrus.Errorf("Error fetching subadmins: %v", err)
-		http.Error(w, "Failed to fetch subadmins", http.StatusInternalServerError)
+		logrus.Errorf("Error fetching sub-admins: %v", err)
+		http.Error(w, "Failed to fetch sub-admins", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(subadmins)
+	json.NewEncoder(w).Encode(subAdmins)
 }
 
 // handlers/users.go
 
 func ListUsers(w http.ResponseWriter, r *http.Request) {
+	page, limit := utils.ParsePageAndLimit(r)
 	ctx := r.Context()
 
 	rolesRaw := ctx.Value(middleware.RolesKey)
@@ -367,7 +498,7 @@ func ListUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	users, err := dbHelper.GetUsersVisibleTo(userID, isAdmin)
+	users, err := dbHelper.GetUsersVisibleTo(userID, isAdmin, page, limit)
 	if err != nil {
 		logrus.Errorf("Failed to get users: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

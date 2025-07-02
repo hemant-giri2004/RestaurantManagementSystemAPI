@@ -9,6 +9,7 @@ import (
 	"rms/database/dbHelper"
 	"rms/middleware"
 	"rms/models"
+	"rms/utils"
 	"strings"
 )
 
@@ -108,7 +109,8 @@ func CreateDish(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetAllRestaurants(w http.ResponseWriter, r *http.Request) {
-	restaurants, err := dbHelper.FetchAllRestaurants()
+	page, limit := utils.ParsePageAndLimit(r)
+	restaurants, err := dbHelper.FetchAllRestaurants(page, limit)
 	if err != nil {
 		logrus.Errorf("Failed to fetch restaurants: %v", err)
 		http.Error(w, "Failed to fetch restaurants", http.StatusInternalServerError)
@@ -120,6 +122,7 @@ func GetAllRestaurants(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetDishesByRestaurant(w http.ResponseWriter, r *http.Request) {
+	page, limit := utils.ParsePageAndLimit(r)
 	//fmt.Println("GetDishesByRestaurant")
 	vars := mux.Vars(r)
 	restaurantIDStr := vars["restaurant_id"]
@@ -130,7 +133,7 @@ func GetDishesByRestaurant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dishes, err := dbHelper.FetchDishesByRestaurant(restaurantID)
+	dishes, err := dbHelper.FetchDishesByRestaurant(restaurantID, page, limit)
 	if err != nil {
 		logrus.Errorf("Failed to fetch dishes: %v", err)
 		http.Error(w, "Failed to fetch dishes", http.StatusInternalServerError)
@@ -142,6 +145,9 @@ func GetDishesByRestaurant(w http.ResponseWriter, r *http.Request) {
 }
 
 func ListRestaurants(w http.ResponseWriter, r *http.Request) {
+	//parse
+	page, limit := utils.ParsePageAndLimit(r)
+
 	ctx := r.Context()
 	rolesRaw := ctx.Value(middleware.RolesKey)
 	userIDRaw := ctx.Value(middleware.UserIDKey)
@@ -166,7 +172,7 @@ func ListRestaurants(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	restaurants, err := dbHelper.GetRestaurantsVisibleTo(userID, isAdmin)
+	restaurants, err := dbHelper.GetRestaurantsVisibleTo(userID, isAdmin, page, limit)
 	if err != nil {
 		logrus.Errorf("Failed to fetch restaurants: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -178,6 +184,10 @@ func ListRestaurants(w http.ResponseWriter, r *http.Request) {
 }
 
 func ListDishes(w http.ResponseWriter, r *http.Request) {
+	//parse
+	page, limit := utils.ParsePageAndLimit(r)
+
+	//use context
 	ctx := r.Context()
 
 	rolesRaw := ctx.Value(middleware.RolesKey)
@@ -203,7 +213,7 @@ func ListDishes(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dishes, err := dbHelper.GetDishesVisibleTo(userID, isAdmin)
+	dishes, err := dbHelper.GetDishesVisibleTo(userID, isAdmin, page, limit)
 	if err != nil {
 		logrus.Errorf("Failed to fetch dishes: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
