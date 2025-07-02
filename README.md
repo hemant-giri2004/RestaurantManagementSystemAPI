@@ -1,5 +1,3 @@
----
-
 ```markdown
 # 🍽️ Restaurant Management System API
 
