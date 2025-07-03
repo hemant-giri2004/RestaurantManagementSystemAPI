@@ -124,7 +124,7 @@ I’m an MCA student passionate about backend development, Golang, and building 
 
 * 🎓 GL Bajaj Institute of Technology and Management
 * 🛠️ Strong in Go, SQL, C++, and system design
-* 🎯 Goal: Become a backend developer in a top MNC
+* 🎯 Goal: Become a backend developer
 
 📍 From Bulandshahr, Uttar Pradesh
 
