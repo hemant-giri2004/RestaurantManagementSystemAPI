@@ -131,10 +131,3 @@ I’m an MCA student passionate about backend development, Golang, and building 
 > Feel free to connect or explore my GitHub profile for more cool stuff.
 
 ---
-
-Let me know if you want me to:
-
-* Add a badge section
-* Include images or GIFs
-* Link Postman or Swagger API collection
-  I’d be happy to customize it further.
