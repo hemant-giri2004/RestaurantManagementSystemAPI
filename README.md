@@ -2,8 +2,6 @@
 
 Welcome to the **Restaurant Management System API** — a backend project built with 💙 **Golang** and 🐘 **PostgreSQL**. This system lets admins manage restaurants, dishes, and users securely using **JWT tokens** and **role-based access**.
 
-Whether you're a developer, recruiter, or curious learner — this README will walk you through everything implemented.
-
 ---
 
 ## ✨ What This Project Does
